@@ -434,7 +434,7 @@ sim_initialize_xy_single(sim_t *sim)
 	double dx = 0;
 	for (i=0; i < sim->n; i++) {
 		sim->x[i][0] = 0.5*sim->l[i] + dx;
-		dx = sim->x[i][0] + 0.5*sim->l[i] + XBUFFER;
+		dx = sim->x[i][0] + 0.5*sim->l[i] + sim->single_lane_space;
 
 		if (dx > sim->roadlen_meters) {
 			fprintf(stderr, "single-lane mode: unable to fit vehicle nr. %d\n", i);
