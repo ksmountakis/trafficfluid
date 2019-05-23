@@ -9,7 +9,7 @@
 #define PARALLEL_RUN 1
 
 
-#define BUS_RATIO 10
+#define BUS_RATIO 0
 double LANEWIDTH;
 #define VD_VARIANCE 2.0
 #define XBUFFER 2.0
@@ -38,6 +38,7 @@ typedef	struct {
 }walls_t;
 
 typedef struct {
+	double alpha;
 	double frame_timegap;
 	int ftsx_disabled;
 	int fca_nbors, fca_nbors_nudge;
@@ -101,6 +102,8 @@ sim_configure(sim_t *sim) {
 	int input_int;
 	double input_dbl;
 	while (fgets(buf, sizeof(buf), stdin)) {
+		if (sscanf(buf, "alpha:%lf", &input_dbl) == 1)
+			sim->alpha = input_dbl;
 		if (sscanf(buf, "frame_timegap:%lf", &input_dbl) == 1)
 			sim->frame_timegap = input_dbl;
 		/* duet configuration */
@@ -226,7 +229,7 @@ sim_configure(sim_t *sim) {
 			sim->ftsy_hi = input_dbl;
 	}
 
-	if ( !sim->n || !sim->K  || !sim->T
+	if (!sim->alpha || !sim->n || !sim->K  || !sim->T
 			||(sim->vd_throttling && !sim->vd_throttling_horizon)
 			||!sim->coeff_fcax ||!sim->coeff_fcay ||!sim->fcax_zeta ||!sim->fcay_zeta ||!sim->safety_level_x || !sim->safety_level_y
 			||!sim->vd_meters_per_sec_lo ||!sim->vd_meters_per_sec_hi
@@ -237,6 +240,7 @@ sim_configure(sim_t *sim) {
 		fprintf(stderr, "incomplete configuration\n");
 		exit(1);
 	}
+	
 
 	LANEWIDTH = 3.4;
 	if (sim->four_lane_init)
@@ -564,8 +568,9 @@ sim_run(sim_t *sim, int K) {
 			regulate_forces(sim, i, t);
 			determine_controls(sim, i, t);
 
-			sim->vx[i][t+1] = sim->vx[i][t] + sim->ux[i][t]*sim->T; 
-			sim->x[i][t+1] = sim->x[i][t] + sim->vx[i][t]*sim->T + sim->ux[i][t]*0.5*pow(sim->T, 2);
+			double T = sim->alpha * sim->T;
+			sim->vx[i][t+1] = sim->vx[i][t] + sim->ux[i][t]*T; 
+			sim->x[i][t+1] = sim->x[i][t] + sim->vx[i][t]*T + sim->ux[i][t]*0.5*pow(T, 2);
 			sim->x[i][t+1] = fmod(sim->x[i][t+1], sim->roadlen_meters);
 
 			// update flow
@@ -575,8 +580,8 @@ sim_run(sim_t *sim, int K) {
 			}
 
 			if (!sim->single_lane) {
-				sim->vy[i][t+1] = sim->vy[i][t] + sim->uy[i][t]*sim->T; 
-				sim->y[i][t+1] = sim->y[i][t] + sim->vy[i][t]*sim->T + sim->uy[i][t]*0.5*pow(sim->T, 2);
+				sim->vy[i][t+1] = sim->vy[i][t] + sim->uy[i][t]*T; 
+				sim->y[i][t+1] = sim->y[i][t] + sim->vy[i][t]*T + sim->uy[i][t]*0.5*pow(T, 2);
 			}
 		}
 
@@ -802,8 +807,9 @@ main(int argc, char **argv) {
 	sim_run(&sim, sim.K);
 	sim_print(&sim);
 
+	double T = sim.alpha * sim.T;
 	int k0 = 0.75 * sim.K;
-	double duration = fmax(sim.T, (sim.K-2 - k0) * sim.T);
+	double duration = fmax(T, (sim.K-2 - k0) * T);
 	double flow = (sim.flow[sim.K-2] - sim.flow[k0]) * (3600.0/duration);
 
 	fprintf(stderr, "n %d roadlen %.0lf coeff %.1lf %.1lf fwd %.1lf %.1lf bwd %.1lf %.1lf safety %.1lf %.1lf fcamax %d flow %.1lf crashes %d crashes-on-leaders %d\n", 
