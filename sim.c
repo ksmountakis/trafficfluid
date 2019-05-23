@@ -250,11 +250,7 @@ sim_configure(sim_t *sim) {
 
 static void sim_run(sim_t *sim, int K);
 
-/* initalize dimensions */
-static void
-sim_initialize_lw(sim_t *sim)
-{
-	int i;
+static void vehicle_lw(sim_t *sim, int i, int isTruck){
 
 	struct {
 		double l, aspect_ratio;
@@ -266,9 +262,24 @@ sim_initialize_lw(sim_t *sim)
 		{4.60, 2.6},
 		{5.15, 2.8},
 	};
+	int draw = (int)SAMPLE_UNIFORM(0, 5);
+
+	sim->l[i] = types[draw].l;
+	sim->w[i] = sim->l[i] / types[draw].aspect_ratio;
+
+	if (isTruck == 1){
+		sim->l[i] = SAMPLE_UNIFORM(12, 17);
+		sim->w[i] = 2.5;
+	}
+}
+
+/* initalize dimensions */
+static void
+sim_initialize_lw(sim_t *sim)
+{
+	int i;
 
 	for (i=0; i < sim->n; i++) {
-		int draw = (int)SAMPLE_UNIFORM(0, 5);
 		if (sim->lanedrop && i == 0) {
 			sim->l[i] = 0.25 * sim->roadlen_meters;
 			sim->w[i] = 3.0;
@@ -276,13 +287,10 @@ sim_initialize_lw(sim_t *sim)
 			sim->l[i] = 2.5;
 			sim->w[i] = sim->roadwid_meters;
 		} else {
-			sim->l[i] = types[draw].l;
-			sim->w[i] = sim->l[i] / types[draw].aspect_ratio;
-			if (SAMPLE_UNIFORM(0, 100) < BUS_RATIO) {
-				sim->l[i] = SAMPLE_UNIFORM(12, 17);
-				sim->w[i] = 2.5;
+			if (SAMPLE_UNIFORM(0, 100) < BUS_RATIO)
 				sim->truck[i] = 1;
-			}
+			
+			vehicle_lw(sim, i, sim->truck[i]);
 		}
 	}
 }
@@ -356,6 +364,14 @@ sim_initialize_xy(sim_t *sim)
 		sim->y[j][0] += 0.5*(double)rand()/RAND_MAX;
 
 	}
+
+	/* convert trucks that are positioned in the 3/4 of the road to cars */
+	for (i = 0; i < sim->n; i++){
+		if (sim->truck[i] == 1 && sim->y[i][0] < (1.0/3.0)*sim->roadwid_meters){
+			vehicle_lw(sim, i, 0);
+		}
+	}
+	
 
 	for (l=0; l < numlanes; l++)
 		free(slack[l]);
