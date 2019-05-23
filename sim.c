@@ -9,7 +9,7 @@
 #define PARALLEL_RUN 1
 
 
-#define BUS_RATIO 0
+#define BUS_RATIO 10
 double LANEWIDTH;
 #define VD_VARIANCE 2.0
 #define XBUFFER 2.0
@@ -407,22 +407,10 @@ sim_initialize_vd(sim_t *sim)
 			sim->vx[i][0] = 0;
 			sim->vd[i] = 0;
 		} else {
-			/* i's desired speed in m/s */
-			if (sim->single_lane && sim->single_lane_front_vd > 0 && i == sim->n-1) {
-				sim->vdx_effective[i] = sim->vd[i] = sim->single_lane_front_vd;
-			} else {
-				#if 0
-				const int numlanes = round(sim->roadwid_meters/LANEWIDTH);
-				
-				int l = round(sim->y[i][0]/LANEWIDTH);
-				sim->vd[i] = sim->vd_meters_per_sec_lo + pow((l+1.0)/numlanes, 2)*(sim->vd_meters_per_sec_hi-sim->vd_meters_per_sec_lo);
-				sim->vd[i] = ceil(sim->vd[i]) + VD_VARIANCE * random()/RAND_MAX;
-				sim->vdy_effective[i] = 0;
-				#else
-				double lo = sim->vd_meters_per_sec_lo, hi = sim->vd_meters_per_sec_hi;
-				sim->vd[i] = lo+ (1. - (sim->y[i][0]/sim->roadwid_meters))*(hi-lo);
-				#endif
-			}
+
+			double lo = sim->vd_meters_per_sec_lo, hi = sim->vd_meters_per_sec_hi;
+			sim->vd[i] = lo+ (1. - (sim->y[i][0]/sim->roadwid_meters))*(hi-lo);
+			
 			if (sim->zero_initial_speed)
 				sim->vx[i][0] = 0;
 			else
@@ -437,6 +425,31 @@ sim_initialize_vd_duet(sim_t *sim)
 	sim->vx[0][0] = sim->duet_v0;	
 	sim->vd[0] = sim->duet_vd;
 	sim->vd[1] = sim->vx[1][0] = sim->duet_vd_slow;
+}
+
+static void
+sim_initialize_xy_single(sim_t *sim)
+{
+	int i;
+	double dx = 0;
+	for (i=0; i < sim->n; i++) {
+		sim->x[i][0] = 0.5*sim->l[i] + dx;
+		dx = sim->x[i][0] + 0.5*sim->l[i] + XBUFFER;
+
+		if (dx > sim->roadlen_meters) {
+			fprintf(stderr, "single-lane mode: unable to fit vehicle nr. %d\n", i);
+			exit(1);
+		}
+
+		sim->y[i][0] = 0.5*sim->roadwid_meters;
+	}
+}
+
+static void
+sim_initialize_vd_single(sim_t *sim)
+{
+	sim_initialize_vd(sim);
+	sim->vdx_effective[sim->n-1] = sim->vd[sim->n-1] = sim->single_lane_front_vd;
 }
 
 static void
@@ -515,6 +528,9 @@ sim_initialize(sim_t *sim) {
 	if (sim->duet > 0) {
 		sim_initialize_xy_duet(sim);
 		sim_initialize_vd_duet(sim);
+	} else if (sim->single_lane) {
+		sim_initialize_xy_single(sim);
+		sim_initialize_vd_single(sim);
 	} else {
 		sim_initialize_xy(sim);
 		sim_initialize_vd(sim);
@@ -598,6 +614,9 @@ sim_run(sim_t *sim, int K) {
 			if (!sim->single_lane) {
 				sim->vy[i][t+1] = sim->vy[i][t] + sim->uy[i][t]*T; 
 				sim->y[i][t+1] = sim->y[i][t] + sim->vy[i][t]*T + sim->uy[i][t]*0.5*pow(T, 2);
+			} else {
+				sim->y[i][t+1] = sim->y[i][t];
+				sim->vy[i][t+1] = 0;
 			}
 		}
 
