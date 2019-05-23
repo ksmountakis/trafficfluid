@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<link href='https://fonts.googleapis.com/css?family=Roboto:300,400,500,700|Material+Icons' rel="stylesheet">
+	<link rel="stylesheet" href="common/font-awesome/css/font-awesome.min.css">
+	<link rel="stylesheet" href="common/vuetify.min.css">
+	<link rel="stylesheet" href="common/c3.min.css">
+	<script src="common/vue.min.js"></script>
+	<script src="common/vuex.min.js"></script>
+	<script src="common/vuetify.min.js"></script>
+	<script src="common/jquery.min.js"></script>
+	<script src="common/d3.v5.min.js" charset="utf-8"></script>
+	<script src="common/c3.min.js"></script>
+
+	<script src="common/prng.js"></script>
+	<script src="common/chroma.min.js"></script>
+	<script src="sim.js"></script>
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
+</head>
+
+<body>
+	<v-app id="app" app>
+		<v-container fluid grid-list-lg wrap>
+			<v-layout wrap>
+				<v-flex xs12>
+					<v-card dark color="indigo">
+						<v-card-title v-if="d3.data_progress < 100">
+							Processing simulation data ...
+						</v-card-title>
+
+						<v-card-media id="road-container" v-resize="() => road_container_resize('#road-container')">
+							<svg id="svg-main" width="100%" :height="100 + (px_per_meter * sim.roadwid_meters)" style="margin-top: 5px; margin-left: 5px; margin-right: 5;">
+								<defs>
+									<!-- shadow filter -->
+									<filter id="drop-shadow"  width="150%" height="150%">
+										<feGaussianBlur in="SourceAlpha" stdDeviation="2.2"/>
+										<feOffset dx="2" dy="2" result="offsetblur"/>
+										<feFlood flood-color="rgba(0,0,0,0.5)"/>
+										<feComposite in2="offsetblur" operator="in"/>
+										<feMerge>
+											<feMergeNode/>
+											<feMergeNode in="SourceGraphic"/>
+										</feMerge>
+									</filter>
+									<!-- define the arrow head -->
+									<marker id="arc-path-arrow"  markerWidth="10" orient="auto" overflow="visible" markerHeight="8" refx="0" refy="0" markerUnits="userSpaceOnUse">
+										<polyline fill="none" stroke="dodgerblue" stroke-width="1.5" shape-rendering="geometricPrecision" stroke-linecap="round" stroke-linejoin="round" points="4,-4 9,0 4,4"/>
+									</marker>        
+								</defs>
+							</svg>
+						</v-card-media>
+
+						<v-card-actions>
+							
+							<v-container fluid grid-list-md>
+
+								<v-layout v-if="d3.data_progress >= 100" wrap align-center>
+									<!-- row 1 -->
+									<v-flex xs2>
+										<v-btn v-if="!play.active" small color="primary" @click="play_start"> play </v-btn>
+										<v-btn v-else small color="primary" @click="play_stop"> pause </v-btn>
+										<v-btn small color="secondary" @click="() => {play_stop(); play.t = 0; svg_show(0);}"> reset </v-btn>
+									</v-flex>
+									<v-flex xs10></v-flex>
+
+									<!-- row 2 -->
+									<v-flex xs3>
+										<v-slider :disabled="play.active" persistent-hint :hint="`x${play.speed}`" v-model="play.speed" :min="1" :max="10"></v-slider>
+									</v-flex>
+									<v-flex xs6>
+										<v-chip small>Current time-step = {{play.t}} / {{sim.K}} </v-chip>
+										<v-chip small>T: {{sim.T}}</v-chip>
+										<v-chip small>Road dimensions: {{sim.roadlen_meters}}m &times; {{sim.roadwid_meters}}m</v-chip>
+										<v-chip small>Num. vehicles: {{sim.n}} </v-chip>
+										<v-chip small>Density: {{(100*sim.n/(sim.roadwid_meters/3.0 * sim.roadlen_meters/5.0)).toFixed(0)}}% </v-chip>
+										<v-chip small v-if="d3.data_crashes">Crashes: {{d3.data_crashes[play.t]}}</v-chip>
+									</v-flex>
+									<v-flex xs3></v-flex>
+
+									<!-- row 3 -->
+								</v-layout>
+							</v-container>
+						</v-card-actions>
+					</v-card>
+				</v-flex>
+				<v-flex xs12>
+					<v-card>
+						<v-card-media class="elevation-1">
+							<div id="chart">
+
+							</div>
+						</v-card-media>
+
+						<v-card-actions>
+							<v-select style="max-width: 250px;" label="Chart Mode" 
+								:items="[{value:'general', text:'General'}, {value:'vehicle', text:'Vehicle-specific'}]" 
+								v-model="chart.mode">
+							</v-select>
+
+							<template v-if="chart.mode === 'general'">
+								<v-select style="max-width: 350px;" label="Chart Type" 
+									:items="[
+										{value:'mdsd', text:'Mean Desired Speed Deviation'},
+										{value:'mmux', text:'Mean Max/Min Long. Acceleration'},
+										{value:'flow', text:'Flow'},
+										{value:'reg', text:'Frame regulation'},
+										{value:'frame', text:'Frame degrees'},
+									]"
+									v-model="chart.general.type">
+								</v-select>
+							</template>
+
+							<template v-if="chart.mode === 'vehicle'">
+								<v-chip> Vehicle ID: {{chart.vehicle.id || "None"}} </v-chip>
+							</template>
+							<v-spacer></v-spacer>
+							<v-btn @click="chart_show">Generate</v-btn>
+						</v-card-actions>
+					</v-card>
+				</v-flex>
+			</v-layout>
+		</v-container>
+	</v-app>
+</body>
+
+<script src="index_chart.js"></script>
+<script src="index.js"></script>
+
+<style>
+#svg-main {
+	background-color: 'deepskyblue';
+}
+#road-rect {
+	fill: #ECEFF1;
+}
+
+.shadow {
+	-webkit-box-shadow: 4px 4px 10px grey;
+	-moz-box-shadow: 4px 4px 10px grey;
+	box-shadow: 4px 4px 10px grey;
+}
+svg text {
+    -webkit-user-select: none;
+       -moz-user-select: none;
+        -ms-user-select: none;
+            user-select: none;
+	pointer-events: none;
+}
+</style>
+
+
+</html>
