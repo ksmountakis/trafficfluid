@@ -9,7 +9,7 @@
 #define PARALLEL_RUN 1
 
 
-#define BUS_RATIO 0
+#define BUS_RATIO 10
 double LANEWIDTH;
 #define VD_VARIANCE 2.0
 #define XBUFFER 2.0

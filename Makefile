@@ -8,6 +8,9 @@ endif
 
 all: sim
 
+clean:
+	rm -f sim
+
 
 sim:sim.c sim_forces.c Makefile
 	$(CC) $(CFLAGS) sim.c -o sim $(LDFLAGS)
